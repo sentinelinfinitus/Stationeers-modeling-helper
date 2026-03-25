@@ -42,14 +42,25 @@ class OBJECT_OT_scene_setup(bpy.types.Operator):
             self.report({"INFO"}, "Bounding box exists, scene setup skipped.")
 
         # Create or find "scene utils" collection
-        collection_name = "scene utils"
-        if collection_name not in bpy.data.collections:
-            new_col = bpy.data.collections.new(collection_name)
-            bpy.context.scene.collection.children.link(new_col)
-            # Set color tag to yellow (Blender 4.0+ supports 8 colors: 0-NONE to 8-PURPLE)
-            # Color tag 3 is Yellow (at least in many versions, check or use closest)
-            new_col.color_tag = 'COLOR_03' # COLOR_03 is Yellow
-
+        collections_to_create = [
+            "scene utils", 
+            "stage 0", "stage 1", "stage 2", "stage 3", "stage 4", "stage 5",
+            "connectors", "Main Model", "Destroyed Model"
+        ]
+        
+        for collection_name in collections_to_create:
+            if collection_name not in bpy.data.collections:
+                new_col = bpy.data.collections.new(collection_name)
+                bpy.context.scene.collection.children.link(new_col)
+                
+                # Set default exclusions
+                if collection_name in ["scene utils", "connectors"]:
+                    new_col.exclude_from_export = True
+                    
+                # Set color tag for "scene utils" to yellow (COLOR_03)
+                if collection_name == "scene utils":
+                    new_col.color_tag = 'COLOR_03'
+        
         return {"FINISHED"}
 
 
@@ -325,6 +336,33 @@ class OBJECT_OT_rotate_connector(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class OBJECT_OT_export_models(bpy.types.Operator):
+    """Export each model stage as an FBX with connector sockets"""
+
+    bl_idname = "object.export_models"
+    bl_label = "Export Models"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        # Import the helper function
+        from .helper_files import export
+        
+        result = export.export_model_stages(context)
+        
+        if "FINISHED" in result:
+            self.report({"INFO"}, "Models exported successfully.")
+            return {"FINISHED"}
+        else:
+            # result might be a set or tuple if cancelled with message
+            if isinstance(result, set) and len(result) > 1:
+                # find the message
+                msg = [r for r in result if r != "CANCELLED"][0]
+                self.report({"ERROR"}, msg)
+            else:
+                self.report({"ERROR"}, "Export failed or was cancelled.")
+            return {"CANCELLED"}
+
+
 classes = [
     OBJECT_OT_scene_setup,
     OBJECT_OT_spawn_bounding_box,
@@ -332,6 +370,7 @@ classes = [
     OBJECT_OT_spawn_connector,
     OBJECT_OT_increment_connector,
     OBJECT_OT_rotate_connector,
+    OBJECT_OT_export_models,
 ]
 
 
@@ -400,6 +439,12 @@ def register():
         ],
         default='SMALL'
     )
+    bpy.types.Scene.export_path = bpy.props.StringProperty(
+        name="Export Path",
+        description="Select a custom location for exported models",
+        default="",
+        subtype='DIR_PATH'
+    )
     bpy.types.Object.increment_x = bpy.props.IntProperty(
         name="Increment X",
         default=0,
@@ -439,6 +484,13 @@ def register():
     bpy.types.Object.base_location_y = bpy.props.FloatProperty(name="Base Location Y", default=0.0)
     bpy.types.Object.base_location_z = bpy.props.FloatProperty(name="Base Location Z", default=0.0)
 
+    # Export exclusions
+    bpy.types.Collection.exclude_from_export = bpy.props.BoolProperty(
+        name="Exclude from Export",
+        description="Exclude this collection from FBX export",
+        default=False
+    )
+
     for cls in classes:
         bpy.utils.register_class(cls)
 
@@ -453,6 +505,7 @@ def unregister():
     del bpy.types.Object.is_stationeers_connector
     del bpy.types.Scene.connector_selector
     del bpy.types.Scene.grid_size_selector
+    del bpy.types.Scene.export_path
     del bpy.types.Object.increment_x
     del bpy.types.Object.increment_y
     del bpy.types.Object.increment_z
@@ -463,3 +516,5 @@ def unregister():
     del bpy.types.Object.base_location_x
     del bpy.types.Object.base_location_y
     del bpy.types.Object.base_location_z
+    
+    del bpy.types.Collection.exclude_from_export

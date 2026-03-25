@@ -77,6 +77,22 @@ class VIEW3D_PT_bounding_box_panel(bpy.types.Panel):
                 op = row.operator("object.rotate_connector", text=axis)
                 op.axis = axis
 
+        # Export options at the bottom
+        layout.separator()
+        layout.label(text="Export Options:")
+        
+        # Collection exclusions
+        box = layout.box()
+        box.label(text="Collection Exclusions:")
+        for col in bpy.data.collections:
+            # We skip 'Scene Collection' if it were here, but bpy.data.collections only has user-created ones.
+            # However, it's good to show them all.
+            row = box.row()
+            row.prop(col, "exclude_from_export", text=col.name)
+
+        layout.prop(context.scene, "export_path", text="")
+        layout.operator("object.export_models", text="Export Models")
+
 
 def register():
     bpy.utils.register_class(VIEW3D_PT_bounding_box_panel)
