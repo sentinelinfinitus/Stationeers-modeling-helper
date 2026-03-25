@@ -61,21 +61,25 @@ class OBJECT_OT_spawn_bounding_box(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        # 500mm = 0.5m
-        size = 0.5
-        bpy.ops.mesh.primitive_cube_add(size=size, location=(0, 0, size / 2))
+        # Small Grid = 500mm = 0.5m
+        # Large Grid = 2000mm = 2.0m
+        grid_size_type = context.scene.grid_size_selector
+        base_unit = 2.0 if grid_size_type == 'LARGE' else 0.5
+        
+        bpy.ops.mesh.primitive_cube_add(size=base_unit, location=(0, 0, base_unit / 2))
         obj = context.active_object
         obj.name = "Stationeers_BoundingBox"
         obj.is_stationeers_bbox = True
+        obj.base_unit = base_unit
         obj.display_type = 'BOUNDS'
 
-        # Initialize increment properties (using the defined IntProperties on the Object)
+        # Initialize increment properties
         obj.increment_x = 0
         obj.increment_y = 0
         obj.increment_z = 0
 
-        # Set dimensions properly, 0.5m in each direction
-        obj.dimensions = (size, size, size)
+        # Set dimensions properly
+        obj.dimensions = (base_unit, base_unit, base_unit)
         # Apply scale so dimensions are 1:1 with size
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
@@ -110,7 +114,7 @@ class OBJECT_OT_increment_bounding_box(bpy.types.Operator):
             ("Z", "Z", "Z axis"),
         ]
     )
-    direction: bpy.props.IntProperty()  # 1 for extend, -1 for unextend
+    direction: bpy.props.IntProperty()  # 1 for forward, -1 for backward
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
@@ -225,8 +229,9 @@ class OBJECT_OT_spawn_connector(bpy.types.Operator):
 
         # Placement logic
         # Place on the front face (Y min) at Z=0.25m (snapped to 250mm increment)
-        # Origin must be on a face. Front face is at -bbox.dimensions.y / 2
-        new_obj.location = (0, bbox_initial_loc.y - bbox.dimensions.y / 2, 0.25)
+        # Connectors are always on a 250mm grid (0.25m)
+        z_pos = 0.25
+        new_obj.location = (0, bbox_initial_loc.y - bbox.dimensions.y / 2, z_pos)
         
         # Store base location for increments
         new_obj.base_location_x = new_obj.location.x
@@ -335,23 +340,12 @@ def update_connector_location_callback(self, context):
     if not getattr(self, "is_stationeers_connector", False):
         return
 
-    # Base location is where it was spawned. 
-    # But wait, we don't store the base location. 
-    # Let's assume we use the current position and just add the increment? No, that's not stable.
-    # The requirement says "moved in 250mm increments".
-    # We should probably store a 'base_location' or just use the increments as absolute values from 0 for now, 
-    # but the user said "similar setup to bbox".
-    # For bbox, increments are absolute additions to 0.5m.
+    # Connectors are always on a 250mm grid (0.25m) regardless of bbox size
+    step = 0.25
     
-    # Let's add base_location_x/y/z hidden properties to store spawn point?
-    # Or just use the increments as offsets from where it is? No.
-    
-    # If we look at the requirements: "origin can only be placed along 250mm increments of the bounding box"
-    # This suggests it should snap to a grid.
-    
-    self.location.x = self.base_location_x + (self.connector_increment_x * 0.25)
-    self.location.y = self.base_location_y + (self.connector_increment_y * 0.25)
-    self.location.z = self.base_location_z + (self.connector_increment_z * 0.25)
+    self.location.x = self.base_location_x + (self.connector_increment_x * step)
+    self.location.y = self.base_location_y + (self.connector_increment_y * step)
+    self.location.z = self.base_location_z + (self.connector_increment_z * step)
 
 
 def update_dimensions_callback(self, context):
@@ -359,25 +353,31 @@ def update_dimensions_callback(self, context):
     if not getattr(self, "is_stationeers_bbox", False):
         return
 
-    # Ensure Z >= 0 (though UI should handle this, let's be safe)
+    # Ensure Z >= 0
     if self.increment_z < 0:
         self.increment_z = 0
 
-    # Initial size is 0.5m. Each increment adds 0.5m.
-    size_x = 0.5 + (self.increment_x * 0.5)
-    size_y = 0.5 + (self.increment_y * 0.5)
-    size_z = 0.5 + (self.increment_z * 0.5)
+    base_unit = self.base_unit
+    
+    # Each increment adds one base_unit
+    size_x = base_unit + (self.increment_x * base_unit)
+    size_y = base_unit + (self.increment_y * base_unit)
+    size_z = base_unit + (self.increment_z * base_unit)
 
     # Set dimensions directly
     self.dimensions = (max(0.01, float(size_x)), max(0.01, float(size_y)), max(0.01, float(size_z)))
 
     # To keep bottom at 0, location.z must be half of the height.
-    # Using size_z directly is more reliable than self.dimensions.z immediately after setting it.
     self.location.z = size_z / 2
 
 
 def register():
     # Register properties on Object type
+    bpy.types.Object.base_unit = bpy.props.FloatProperty(
+        name="Base Unit",
+        default=0.5,
+        description="The base grid unit for this bounding box"
+    )
     bpy.types.Object.is_stationeers_bbox = bpy.props.BoolProperty(
         name="Is Stationeers Bounding Box",
         default=False
@@ -390,6 +390,15 @@ def register():
         name="Connector",
         description="Select a connector mesh to spawn",
         items=get_connector_items
+    )
+    bpy.types.Scene.grid_size_selector = bpy.props.EnumProperty(
+        name="Grid Size",
+        description="Select the grid size for the bounding box",
+        items=[
+            ('SMALL', "Small Grid (500mm)", "Base size and increments of 500mm"),
+            ('LARGE', "Large Grid (2000mm)", "Base size and increments of 2000mm"),
+        ],
+        default='SMALL'
     )
     bpy.types.Object.increment_x = bpy.props.IntProperty(
         name="Increment X",
@@ -439,9 +448,11 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
     # Remove properties from Object type
+    del bpy.types.Object.base_unit
     del bpy.types.Object.is_stationeers_bbox
     del bpy.types.Object.is_stationeers_connector
     del bpy.types.Scene.connector_selector
+    del bpy.types.Scene.grid_size_selector
     del bpy.types.Object.increment_x
     del bpy.types.Object.increment_y
     del bpy.types.Object.increment_z

@@ -17,6 +17,9 @@ class VIEW3D_PT_bounding_box_panel(bpy.types.Panel):
         obj = context.active_object
 
         layout.operator("object.scene_setup", text="Scene Setup")
+        layout.separator()
+        layout.label(text="Spawn Options:")
+        layout.prop(context.scene, "grid_size_selector", text="")
         layout.operator("object.spawn_bounding_box", text="Spawn Bounding Box")
 
         if obj and getattr(obj, "is_stationeers_bbox", False):
