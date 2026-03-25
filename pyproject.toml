@@ -1,0 +1,28 @@
+[project]
+name = "stationeers_modeling_helper"
+version = "0.0.1"
+description = "Blender Addon: Stationeers-modeling-helper"
+authors = [
+    {name = "sentinel"}
+]
+requires-python = ">=3.11"
+dependencies = ["pip"]  # Include 'pip' to suppress false-positive environment warnings in PyCharm
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.uv]
+package = true

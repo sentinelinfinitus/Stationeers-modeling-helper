@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+from . import operators, panel
+
+_modules = [
+    operators,
+    panel,
+]
+
+
+def register():
+    for mod in _modules:
+        mod.register()
+
+
+def unregister():
+    for mod in reversed(_modules):
+        mod.unregister()

@@ -1,0 +1,56 @@
+# GitHub Actions reference: https://help.github.com/en/actions
+
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run Ruff (Lint)
+        run: uv run ruff check .
+
+      - name: Run Ruff (Format)
+        run: uv run ruff format --check .
+
+  test:
+    name: Test on ${{ matrix.os }} - Blender ${{ matrix.blender-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        # Check https://download.blender.org/release/ for available versions
+        blender-version: [ "4.2.0", "5.0.0" ]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Blup & Blender
+        uses: unclepomedev/setup-blup@v0
+        with:
+          blender-version: ${{ matrix.blender-version }}
+          cache: true
+
+      - name: Run Tests
+        env:
+          BLENDER_PROBE_PROJECT_ROOT: ${{ github.workspace }}
+        run: |
+            
+              blup run -- --background --factory-startup --python-exit-code 1 --python tests/run_tests.py -- tests
+            
